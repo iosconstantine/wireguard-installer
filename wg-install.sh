@@ -87,26 +87,20 @@ function installQuestions() {
 	done
 
 	until [[ ${SERVER_WG_IPV4} =~ ^([0-9]{1,3}\.){3} ]]; do
-		read -rp "IPv4 сервера WireGuard: " -e -i 10.13.13.6 SERVER_WG_IPV4
+		read -rp "IPv4 сервера WireGuard: " -e -i 10.0.0.1 SERVER_WG_IPV4
 	done
 
 	# Порт, который будет слушать наш Wireguard сервер
 	RANDOM_PORT=$(shuf -i49152-65535 -n1)
 	until [[ ${SERVER_PORT} =~ ^[0-9]+$ ]] && [ "${SERVER_PORT}" -ge 1 ] && [ "${SERVER_PORT}" -le 65535 ]; do
-		read -rp "Порт сервера WireGuard [1-65535]: " -e -i "51820" SERVER_PORT
+		read -rp "Порт сервера WireGuard [1-65535]: " -e -i "51830" SERVER_PORT
 	done
 
 	# Adguard DNS по умолчанию
-	until [[ ${CLIENT_DNS_1} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "Первый DNS для использования: " -e -i 10.13.13.1 CLIENT_DNS_1
+	until [[ ${CLIENT_DNS} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+		read -rp "Первый DNS для использования: " -e -i 8.8.8.8 CLIENT_DNS
 	done
-	until [[ ${CLIENT_DNS_2} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "Второй DNS для использования (необязательно): " -e -i "" CLIENT_DNS_2
-		if [[ ${CLIENT_DNS_2} == "" ]]; then
-			CLIENT_DNS_2="${CLIENT_DNS_1}"
-		fi
-	done
-
+	
 	echo ""
 	echo "Отлично, это было все, что мне было нужно. Теперь мы готовы настроить Ваш сервер WireGuard."
 	echo "Вы сможете создать клиента в конце установки."
@@ -166,31 +160,25 @@ SERVER_WG_IPV4=${SERVER_WG_IPV4}
 SERVER_PORT=${SERVER_PORT}
 SERVER_PRIV_KEY=${SERVER_PRIV_KEY}
 SERVER_PUB_KEY=${SERVER_PUB_KEY}
-CLIENT_DNS_1=${CLIENT_DNS_1}
-CLIENT_DNS_2=${CLIENT_DNS_2}" >/etc/wireguard/params
+CLIENT_DNS=${CLIENT_DNS}" >/etc/wireguard/params
 
 	# Добавить интерфейс сервера
 	echo "[Interface]
 Address = ${SERVER_WG_IPV4}/24
 ListenPort = ${SERVER_PORT}
-PrivateKey = ${SERVER_PRIV_KEY}" >"/etc/wireguard/${SERVER_WG_NIC}.conf"
+PrivateKey = ${SERVER_PRIV_KEY}
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >"/etc/wireguard/${SERVER_WG_NIC}.conf"
 
-	if pgrep firewalld; then
-		FIREWALLD_IPV4_ADDRESS=$(echo "${SERVER_WG_IPV4}" | cut -d"." -f1-3)".0"
-		echo "PostUp = firewall-cmd --add-port ${SERVER_PORT}/udp && firewall-cmd --add-rich-rule='rule family=ipv4 source address=${FIREWALLD_IPV4_ADDRESS}/24 masquerade'
-PostDown = firewall-cmd --remove-port ${SERVER_PORT}/udp && firewall-cmd --remove-rich-rule='rule family=ipv4 source address=${FIREWALLD_IPV4_ADDRESS}/24 masquerade' && firewall-cmd --remove-rich-rule='rule family=ipv6 source address=${FIREWALLD_IPV6_ADDRESS}/24 masquerade'" >>"/etc/wireguard/${SERVER_WG_NIC}.conf"
-	else
-		echo "PostUp = iptables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT; iptables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT; iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
-PostDown = iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT; iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT; iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE"
-	fi
 
 	# Включить маршрутизацию на сервере
-	echo "net.ipv4.ip_forward = 1" >/etc/sysctl.d/wg.conf
+	echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 
-	sysctl --system 
+	sysctl -p
 
-	systemctl enable "wg-quick@${SERVER_WG_NIC}"
-	systemctl start "wg-quick@${SERVER_WG_NIC}"
+	systemctl enable "wg-quick@${SERVER_WG_NIC}.service"
+	systemctl start "wg-quick@${SERVER_WG_NIC}.service"
+	systemctl status "wg-quick@${SERVER_WG_NIC}.service"
 
 	newClient
 	echo "Если вы хотите добавить больше клиентов, Вам просто нужно запустить этот скрипт еще раз!"
@@ -276,8 +264,9 @@ function newClient() {
 	# Создайте клиентский файл и добавьте сервер в качестве пира.
 	echo "[Interface]
 PrivateKey = ${CLIENT_PRIV_KEY}
+ListenPort = ${SERVER_PORT}
 Address = ${CLIENT_WG_IPV4}/32
-DNS = ${CLIENT_DNS_1},${CLIENT_DNS_2}
+DNS = ${CLIENT_DNS}
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
