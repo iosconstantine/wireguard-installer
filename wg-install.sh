@@ -150,7 +150,7 @@ function installWireGuard() {
 	chmod 600 -R /etc/wireguard/
 
 	SERVER_PRIV_KEY=$(wg genkey)
-	SERVER_PUB_KEY=$(echo "${SERVER_PRIV_KEY}" | wg pubkey)
+	SERVER_PUB_KEY=$(wg pubkey)
 
 	# Сохранить настройки WireGuard
 	echo "SERVER_PUB_IP=${SERVER_PUB_IP}
@@ -164,9 +164,9 @@ CLIENT_DNS=${CLIENT_DNS}" >/etc/wireguard/params
 
 	# Добавить интерфейс сервера
 	echo "[Interface]
+PrivateKey = ${SERVER_PRIV_KEY}
 Address = ${SERVER_WG_IPV4}/24
 ListenPort = ${SERVER_PORT}
-PrivateKey = ${SERVER_PRIV_KEY}
 PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >"/etc/wireguard/${SERVER_WG_NIC}.conf"
 
@@ -241,7 +241,7 @@ function newClient() {
 
 	# Сгенерировать пару ключей для клиента
 	CLIENT_PRIV_KEY=$(wg genkey)
-	CLIENT_PUB_KEY=$(echo "${CLIENT_PRIV_KEY}" | wg pubkey)
+	CLIENT_PUB_KEY=$(wg pubkey)
 	CLIENT_PRE_SHARED_KEY=$(wg genpsk)
 
 	# Домашняя директория пользователя, куда будет записана конфигурация клиента
@@ -270,16 +270,17 @@ DNS = ${CLIENT_DNS}
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
-PresharedKey = ${CLIENT_PRE_SHARED_KEY}
 Endpoint = ${ENDPOINT}
 AllowedIPs = 0.0.0.0/0" >>"${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
 
 	echo -e "\n### Клиент ${CLIENT_NAME}
 [Peer]
 PublicKey = ${CLIENT_PUB_KEY}
-PresharedKey = ${CLIENT_PRE_SHARED_KEY}
 AllowedIPs = ${CLIENT_WG_IPV4}/32" >>"/etc/wireguard/${SERVER_WG_NIC}.conf"
 
+#PresharedKey = ${CLIENT_PRE_SHARED_KEY}
+
+	# перезапустить wireguard, чтобы применить изменения
 	wg syncconf "${SERVER_WG_NIC}" <(wg-quick strip "${SERVER_WG_NIC}")
 
 	echo -e "\nВот ваш файл конфигурации клиента в виде QR-кода:"
@@ -317,7 +318,7 @@ function revokeClient() {
 	# удалить сгенерированный файл клиента
 	rm -f "${HOME}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
 
-	# перезапустите wireguard, чтобы применить изменения
+	# перезапустить wireguard, чтобы применить изменения
 	wg syncconf "${SERVER_WG_NIC}" <(wg-quick strip "${SERVER_WG_NIC}")
 }
 
