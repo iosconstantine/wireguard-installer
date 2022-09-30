@@ -30,32 +30,27 @@ function checkVirt() {
 }
 
 function checkOS() {
-	# Проверка версии OS
+	# Check OS version
 	if [[ -e /etc/debian_version ]]; then
 		source /etc/os-release
-		echo "debian, ubuntu"
-		OS="${ID}" # debian или ubuntu
+		OS="${ID}" # debian or ubuntu
 		if [[ ${ID} == "debian" || ${ID} == "raspbian" ]]; then
 			if [[ ${VERSION_ID} -lt 10 ]]; then
 				echo "Ваша версия Debian (${VERSION_ID}) не поддерживается. Пожалуйста используйте Debian 10 Buster или выше"
 				exit 1
 			fi
-			OS=debian # перезаписать если raspbian
+			OS=debian # overwrite if raspbian
 		fi
 	elif [[ -e /etc/fedora-release ]]; then
 		source /etc/os-release
-		echo "fedora"
 		OS="${ID}"
 	elif [[ -e /etc/centos-release ]]; then
 		source /etc/os-release
-		echo "centos"
 		OS=centos
 	elif [[ -e /etc/oracle-release ]]; then
 		source /etc/os-release
-		echo "oracle"
 		OS=oracle
 	elif [[ -e /etc/arch-release ]]; then
-		echo "arch"
 		OS=arch
 	else
 		echo "Похоже, вы не используете этот скрипт в системе Debian, Ubuntu, Fedora, CentOS, Oracle или Arch Linux."
