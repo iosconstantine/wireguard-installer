@@ -29,6 +29,35 @@ function checkVirt() {
 	fi
 }
 
+function checkOS() {
+	# Проверка версии OS
+	if 
+	if [[ -e /etc/debian_version ]]; then
+		source /etc/os-release
+		OS="${ID}" # debian или ubuntu
+		if [[ ${ID} == "debian" || ${ID} == "raspbian" ]]; then
+			if [[ ${VERSION_ID} -lt 10 ]]; then
+				echo "Ваша версия Debian (${VERSION_ID}) не поддерживается. Пожалуйста используйте Debian 10 Buster или выше"
+				exit 1
+			fi
+			OS=debian # перезаписать если raspbian
+		fi
+	elif [[ -e /etc/fedora-release ]]; then
+		source /etc/os-release
+		OS="${ID}"
+	elif [[ -e /etc/centos-release ]]; then
+		source /etc/os-release
+		OS=centos
+	elif [[ -e /etc/oracle-release ]]; then
+		source /etc/os-release
+		OS=oracle
+	elif [[ -e /etc/arch-release ]]; then
+		OS=arch
+	else
+		echo "Похоже, вы не используете этот скрипт в системе Debian, Ubuntu, Fedora, CentOS, Oracle или Arch Linux."
+		exit 1
+	fi
+}
 
 function initialCheck() {
 	isRoot
