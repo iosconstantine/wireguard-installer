@@ -19,11 +19,6 @@ chmod +x wg-install.sh
 ## Требования
 
 - Ubuntu >= 16.04
-- Debian >= 10
-- Fedora
-- CentOS
-- Arch Linux
-- Oracle Linux
 
 
 Он установит WireGuard (модуль ядра и инструменты) на сервер, настроит его, создаст службу systemd и файл конфигурации клиента.
