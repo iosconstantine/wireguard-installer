@@ -29,39 +29,10 @@ function checkVirt() {
 	fi
 }
 
-function checkOS() {
-	# Проверка версии OS
-	if [[ -e /etc/debian_version ]]; then
-		source /etc/os-release
-		OS="${ID}" # debian или ubuntu
-		if [[ ${ID} == "debian" || ${ID} == "raspbian" ]]; then
-			if [[ ${VERSION_ID} -lt 10 ]]; then
-				echo "Ваша версия Debian (${VERSION_ID}) не поддерживается. Пожалуйста используйте Debian 10 Buster или выше"
-				exit 1
-			fi
-			OS=debian # перезаписать если raspbian
-		fi
-	elif [[ -e /etc/fedora-release ]]; then
-		source /etc/os-release
-		OS="${ID}"
-	elif [[ -e /etc/centos-release ]]; then
-		source /etc/os-release
-		OS=centos
-	elif [[ -e /etc/oracle-release ]]; then
-		source /etc/os-release
-		OS=oracle
-	elif [[ -e /etc/arch-release ]]; then
-		OS=arch
-	else
-		echo "Похоже, вы не используете этот скрипт в системе Debian, Ubuntu, Fedora, CentOS, Oracle или Arch Linux."
-		exit 1
-	fi
-}
 
 function initialCheck() {
 	isRoot
 	checkVirt
-	checkOS
 }
 
 function installQuestions() {
@@ -107,42 +78,15 @@ function installQuestions() {
 	read -n1 -r -p "Нажмите любую клавишу для продолжения..."
 }
 
+function setupUbuntu() {
+	apt-get update
+	apt-get upgrade -y
+	apt-get install -y wireguard iptables resolvconf qrencode
+}}
+
 function installWireGuard() {
 	installQuestions
-
-	if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
-		apt-get update
-		apt-get install -y wireguard iptables resolvconf qrencode
-	elif [[ ${OS} == 'debian' ]]; then
-		if ! grep -rqs "^deb .* buster-backports" /etc/apt/; then
-			echo "deb http://deb.debian.org/debian buster-backports main" >/etc/apt/sources.list.d/backports.list
-			apt-get update
-		fi
-		apt update
-		apt-get install -y iptables resolvconf qrencode
-		apt-get install -y -t buster-backports wireguard
-	elif [[ ${OS} == 'fedora' ]]; then
-		if [[ ${VERSION_ID} -lt 32 ]]; then
-			dnf install -y dnf-plugins-core
-			dnf copr enable -y jdoss/wireguard
-			dnf install -y wireguard-dkms
-		fi
-		dnf install -y wireguard-tools iptables qrencode
-	elif [[ ${OS} == 'centos' ]]; then
-		yum -y install epel-release elrepo-release
-		if [[ ${VERSION_ID} -eq 7 ]]; then
-			yum -y install yum-plugin-elrepo
-		fi
-		yum -y install kmod-wireguard wireguard-tools iptables qrencode
-	elif [[ ${OS} == 'oracle' ]]; then
-		dnf install -y oraclelinux-developer-release-el8
-		dnf config-manager --disable -y ol8_developer
-		dnf config-manager --enable -y ol8_developer_UEKR6
-		dnf config-manager --save -y --setopt=ol8_developer_UEKR6.includepkgs='wireguard-tools*'
-		dnf install -y wireguard-tools qrencode iptables
-	elif [[ ${OS} == 'arch' ]]; then
-		pacman -S --needed --noconfirm wireguard-tools qrencode
-	fi
+	setupUbuntu
 
 	# Убедитесь, что каталог существует (это не относится к Fedora)
 	mkdir /etc/wireguard >/dev/null 2>&1
