@@ -31,7 +31,6 @@ function checkVirt() {
 
 function checkOS() {
 	# Проверка версии OS
-	if 
 	if [[ -e /etc/debian_version ]]; then
 		source /etc/os-release
 		echo "debian, ubuntu"
