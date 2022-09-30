@@ -117,7 +117,6 @@ function installWireGuard() {
 
 	if [[ ${OS} == 'ubuntu' ]] || [[ ${OS} == 'debian' && ${VERSION_ID} -gt 10 ]]; then
 		apt-get update
-		apt-get upgrade -y
 		apt-get install -y wireguard iptables resolvconf qrencode
 	elif [[ ${OS} == 'debian' ]]; then
 		if ! grep -rqs "^deb .* buster-backports" /etc/apt/; then
