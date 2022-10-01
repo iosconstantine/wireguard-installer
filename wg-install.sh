@@ -30,16 +30,16 @@ function checkVirt() {
 }
 
 function checkOS() {
-	# Check OS version
+	# Проверка версии OS
 	if [[ -e /etc/debian_version ]]; then
 		source /etc/os-release
-		OS="${ID}" # debian or ubuntu
+		OS="${ID}"
 		if [[ ${ID} == "debian" || ${ID} == "raspbian" ]]; then
 			if [[ ${VERSION_ID} -lt 10 ]]; then
 				echo "Ваша версия Debian (${VERSION_ID}) не поддерживается. Пожалуйста используйте Debian 10 Buster или выше"
 				exit 1
 			fi
-			OS=debian # overwrite if raspbian
+			OS=debian
 		fi
 	elif [[ -e /etc/fedora-release ]]; then
 		source /etc/os-release
@@ -87,20 +87,26 @@ function installQuestions() {
 	done
 
 	until [[ ${SERVER_WG_IPV4} =~ ^([0-9]{1,3}\.){3} ]]; do
-		read -rp "IPv4 сервера WireGuard: " -e -i 10.0.0.1 SERVER_WG_IPV4
+		read -rp "IPv4 сервера WireGuard: " -e -i 10.22.11.1 SERVER_WG_IPV4
 	done
 
 	# Порт, который будет слушать наш Wireguard сервер
 	RANDOM_PORT=$(shuf -i49152-65535 -n1)
 	until [[ ${SERVER_PORT} =~ ^[0-9]+$ ]] && [ "${SERVER_PORT}" -ge 1 ] && [ "${SERVER_PORT}" -le 65535 ]; do
-		read -rp "Порт сервера WireGuard [1-65535]: " -e -i "51830" SERVER_PORT
+		read -rp "Порт сервера WireGuard [1-65535]: " -e -i "${RANDOM_PORT}" SERVER_PORT
 	done
 
 	# Adguard DNS по умолчанию
-	until [[ ${CLIENT_DNS} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
-		read -rp "Первый DNS для использования: " -e -i 8.8.8.8 CLIENT_DNS
+	until [[ ${CLIENT_DNS_1} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+		read -rp "Первый DNS для использования:: " -e -i 94.140.14.14 CLIENT_DNS_1
 	done
-	
+	until [[ ${CLIENT_DNS_2} =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]]; do
+		read -rp "Второй DNS для использования: (optional): " -e -i 94.140.15.15 CLIENT_DNS_2
+		if [[ ${CLIENT_DNS_2} == "" ]]; then
+			CLIENT_DNS_2="${CLIENT_DNS_1}"
+		fi
+	done
+
 	echo ""
 	echo "Отлично, это было все, что мне было нужно. Теперь мы готовы настроить Ваш сервер WireGuard."
 	echo "Вы сможете создать клиента в конце установки."
@@ -150,7 +156,7 @@ function installWireGuard() {
 	chmod 600 -R /etc/wireguard/
 
 	SERVER_PRIV_KEY=$(wg genkey)
-	SERVER_PUB_KEY=$(wg pubkey)
+	SERVER_PUB_KEY=$(echo "${SERVER_PRIV_KEY}" | wg pubkey)
 
 	# Сохранить настройки WireGuard
 	echo "SERVER_PUB_IP=${SERVER_PUB_IP}
@@ -160,30 +166,30 @@ SERVER_WG_IPV4=${SERVER_WG_IPV4}
 SERVER_PORT=${SERVER_PORT}
 SERVER_PRIV_KEY=${SERVER_PRIV_KEY}
 SERVER_PUB_KEY=${SERVER_PUB_KEY}
-CLIENT_DNS=${CLIENT_DNS}" >/etc/wireguard/params
+CLIENT_DNS_1=${CLIENT_DNS_1}
+CLIENT_DNS_2=${CLIENT_DNS_2}" >/etc/wireguard/params
 
 	# Добавить интерфейс сервера
 	echo "[Interface]
-PrivateKey = ${SERVER_PRIV_KEY}
 Address = ${SERVER_WG_IPV4}/24
 ListenPort = ${SERVER_PORT}
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >"/etc/wireguard/${SERVER_WG_NIC}.conf"
+PrivateKey = ${SERVER_PRIV_KEY}" >"/etc/wireguard/${SERVER_WG_NIC}.conf"
 
+	echo "PostUp = iptables -A FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT; iptables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT; iptables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE; ip6tables -A FORWARD -i ${SERVER_WG_NIC} -j ACCEPT; ip6tables -t nat -A POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE
+PostDown = iptables -D FORWARD -i ${SERVER_PUB_NIC} -o ${SERVER_WG_NIC} -j ACCEPT; iptables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT; iptables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE; ip6tables -D FORWARD -i ${SERVER_WG_NIC} -j ACCEPT; ip6tables -t nat -D POSTROUTING -o ${SERVER_PUB_NIC} -j MASQUERADE" >>"/etc/wireguard/${SERVER_WG_NIC}.conf"
 
 	# Включить маршрутизацию на сервере
-	echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+	echo "net.ipv4.ip_forward = 1" >/etc/sysctl.d/wg.conf
 
-	sysctl -p
+	sysctl --system
 
-	systemctl enable "wg-quick@${SERVER_WG_NIC}.service"
-	systemctl start "wg-quick@${SERVER_WG_NIC}.service"
-	systemctl status "wg-quick@${SERVER_WG_NIC}.service"
+	systemctl start "wg-quick@${SERVER_WG_NIC}"
+	systemctl enable "wg-quick@${SERVER_WG_NIC}"
 
 	newClient
 	echo "Если вы хотите добавить больше клиентов, Вам просто нужно запустить этот скрипт еще раз!"
 
-	# Проверьте, работает ли WireGuard
+	# Проверка, работает ли WireGuard
 	systemctl is-active --quiet "wg-quick@${SERVER_WG_NIC}"
 	WG_RUNNING=$?
 
@@ -239,9 +245,9 @@ function newClient() {
 		fi
 	done
 
-	# Сгенерировать пару ключей для клиента
+	# Генерация ключа для клиента
 	CLIENT_PRIV_KEY=$(wg genkey)
-	CLIENT_PUB_KEY=$(wg pubkey)
+	CLIENT_PUB_KEY=$(echo "${CLIENT_PRIV_KEY}" | wg pubkey)
 	CLIENT_PRE_SHARED_KEY=$(wg genpsk)
 
 	# Домашняя директория пользователя, куда будет записана конфигурация клиента
@@ -264,23 +270,22 @@ function newClient() {
 	# Создайте клиентский файл и добавьте сервер в качестве пира.
 	echo "[Interface]
 PrivateKey = ${CLIENT_PRIV_KEY}
-ListenPort = ${SERVER_PORT}
 Address = ${CLIENT_WG_IPV4}/32
-DNS = ${CLIENT_DNS}
+DNS = ${CLIENT_DNS_1},${CLIENT_DNS_2}
 
 [Peer]
 PublicKey = ${SERVER_PUB_KEY}
+PresharedKey = ${CLIENT_PRE_SHARED_KEY}
 Endpoint = ${ENDPOINT}
 AllowedIPs = 0.0.0.0/0" >>"${HOME_DIR}/${SERVER_WG_NIC}-client-${CLIENT_NAME}.conf"
 
+	# Добавить пир для клиента
 	echo -e "\n### Клиент ${CLIENT_NAME}
 [Peer]
 PublicKey = ${CLIENT_PUB_KEY}
+PresharedKey = ${CLIENT_PRE_SHARED_KEY}
 AllowedIPs = ${CLIENT_WG_IPV4}/32" >>"/etc/wireguard/${SERVER_WG_NIC}.conf"
 
-#PresharedKey = ${CLIENT_PRE_SHARED_KEY}
-
-	# перезапустить wireguard, чтобы применить изменения
 	wg syncconf "${SERVER_WG_NIC}" <(wg-quick strip "${SERVER_WG_NIC}")
 
 	echo -e "\nВот ваш файл конфигурации клиента в виде QR-кода:"
@@ -355,7 +360,6 @@ function uninstallWg() {
 		rm -rf /etc/wireguard
 		rm -f /etc/sysctl.d/wg.conf
 
-		# Перезагрузить sysctl
 		sysctl --system
 
 		# Проверьте, работает ли WireGuard
