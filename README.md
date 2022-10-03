@@ -1,7 +1,5 @@
 # WireGuard installer
 
-![visitors](https://visitor-badge.glitch.me/badge?page_id=ios&left_color=red&right_color=blue)
-
 **Этот проект представляет собой bash-скрипт, цель которого — как можно проще настроить [WireGuard](https://www.wireguard.com/) VPN на сервере Linux!**
 
 Скрипт поддерживает только IPv4
@@ -26,6 +24,6 @@ chmod +x wg-install.sh
 - Oracle Linux
 
 
-Он установит WireGuard (модуль ядра и инструменты) на сервер, настроит его, создаст службу systemd и файл конфигурации клиента.
+Он установит WireGuard на сервер, настроит его, создаст службу systemd и файл конфигурации клиента.
 
 Запустите скрипт еще раз, чтобы добавить или удалить клиентов!
